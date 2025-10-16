@@ -79,11 +79,15 @@ def main(
             model = UniXcoder(model_name)
         else:
             model = AutoModel.from_pretrained(model_name, cache_dir="cache")
-        # keep original behavior; cosine mode requires device, but we do not
-        # force CUDA if not available. Fallback to CPU.
+        # Device selection: prioritize CUDA, then MPS (Apple Silicon), then CPU
         try:
             import torch
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
             model.to(device)
         except Exception:
             pass
@@ -97,7 +101,6 @@ def main(
 
     for setting, dataset in mapping.items():
         res = {}
-        i = 0
         for key, dic_list in dataset.items():
             res[key] = []
             for dic in tqdm(dic_list, desc=f"running {key}"):
@@ -107,12 +110,12 @@ def main(
                     candidates = dic['context']
                     res_dic[i] = retrieve(
                         code=code,
-                        candidates=candidates, 
+                        candidates=candidates,
                         tokenizer=tokenizer,
-                        model=model, 
+                        model=model,
                         max_length=max_length,
                         similarity=similarity)
-                
+
                 # In data the field name is 'golden_snippet_index'.
                 # Fall back to 'gold_snippet_index' if present to be robust to older dumps.
                 res_dic['ground_truth'] = dic.get('golden_snippet_index', dic.get('gold_snippet_index'))
