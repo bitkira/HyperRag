@@ -52,6 +52,8 @@ def retrieve(
                 )
                 input_ids = encoded['input_ids'].to(device)
                 attention_mask = encoded.get('attention_mask', None)
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(device)
 
                 with torch.no_grad():
                     if attention_mask is not None:
@@ -194,6 +196,8 @@ def retrieve_batch(
             )
             input_ids = encoded['input_ids'].to(device)
             attention_mask = encoded.get('attention_mask', None)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(device)
 
             with torch.no_grad():
                 if attention_mask is not None:

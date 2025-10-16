@@ -25,16 +25,17 @@ except Exception:
 def main(
         language: str, # language of the data, python or java
         similarity: str, # the similarity used to retrieve, e.g., cosine, edit, jaccard
-        keep_lines: list, # the lines to keep, e.g., [3, 10]
+        keep_line: int, # the number of lines to keep, e.g., 3
+        setting: str, # cross_file_first or cross_file_random
+        difficulty: str, # easy or hard
         model_name: str = "", # the model used to encode the code, e.g., microsoft/unixcoder-base
         max_length: int = 512, # max length of the code
     ):
-    # load the data
-    settings = ["cross_file_first", "cross_file_random"]
-    data_first, data_random = load_data(split="test", task="retrieval", language=language, settings=settings)
+    # load the data for the specified setting only
+    data = load_data(split="test", task="retrieval", language=language, settings=setting)
 
-    data_first = data_first["test"]
-    data_random = data_random["test"]
+    # Extract the test split and specified difficulty
+    dic_list = data["test"][difficulty]
 
     # Default lexical retrieval
     class _SimpleTokenizer:
@@ -92,44 +93,42 @@ def main(
         except Exception:
             pass
 
-    
-    
-    mapping = {
-        "first": data_first,
-        "random": data_random
-    }
 
-    for setting, dataset in mapping.items():
-        res = {}
-        for key, dic_list in dataset.items():
-            res[key] = []
-            for dic in tqdm(dic_list, desc=f"running {key}"):
-                res_dic = {}
-                for i in keep_lines:
-                    code = crop_code_lines(dic['code'], i)
-                    candidates = dic['context']
-                    res_dic[i] = retrieve(
-                        code=code,
-                        candidates=candidates,
-                        tokenizer=tokenizer,
-                        model=model,
-                        max_length=max_length,
-                        similarity=similarity)
+    # Process the specified setting and difficulty
+    results = []
+    for dic in tqdm(dic_list, desc=f"running {setting}/{difficulty}"):
+        code = crop_code_lines(dic['code'], keep_line)
+        candidates = dic['context']
+        ranks = retrieve(
+            code=code,
+            candidates=candidates,
+            tokenizer=tokenizer,
+            model=model,
+            max_length=max_length,
+            similarity=similarity)
 
-                # In data the field name is 'golden_snippet_index'.
-                # Fall back to 'gold_snippet_index' if present to be robust to older dumps.
-                res_dic['ground_truth'] = dic.get('golden_snippet_index', dic.get('gold_snippet_index'))
-                res[key].append(res_dic)
-        
-        # write
-        if model_name:
-            os.makedirs(f'results/retrieval/{model_name.split("/")[-1]}', exist_ok=True)
-            with open(f"results/retrieval/{model_name.split('/')[-1]}/{language}_{setting}.json", "w") as f:
-                json.dump(res, f, indent=4)
-        else:
-            os.makedirs(f'results/retrieval/{similarity}', exist_ok=True)
-            with open(f"results/retrieval/{similarity}/{language}_{setting}.json", "w") as f:
-                json.dump(res, f, indent=4)
+        # In data the field name is 'golden_snippet_index'.
+        # Fall back to 'gold_snippet_index' if present to be robust to older dumps.
+        res_dic = {
+            'ranks': ranks,
+            'ground_truth': dic.get('golden_snippet_index', dic.get('gold_snippet_index'))
+        }
+        results.append(res_dic)
+
+    # Write results
+    # Construct filename: python_first_easy_k3.json
+    setting_short = "first" if "first" in setting else "random"
+    filename = f"{language}_{setting_short}_{difficulty}_k{keep_line}.json"
+
+    if model_name:
+        os.makedirs(f'results/retrieval/{model_name.split("/")[-1]}', exist_ok=True)
+        filepath = f"results/retrieval/{model_name.split('/')[-1]}/{filename}"
+    else:
+        os.makedirs(f'results/retrieval/{similarity}', exist_ok=True)
+        filepath = f"results/retrieval/{similarity}/{filename}"
+
+    with open(filepath, "w") as f:
+        json.dump(results, f, indent=4)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run RepoBench-R retrieval baseline")
@@ -137,8 +136,12 @@ if __name__ == "__main__":
                         help="Language of the data")
     parser.add_argument("--similarity", "-s", type=str, choices=["edit", "jaccard", "cosine"], required=True,
                         help="Similarity metric to use")
-    parser.add_argument("--keep-lines", "-k", type=int, nargs='+', required=True,
-                        help="Lines to keep; e.g., --keep-lines 3 10")
+    parser.add_argument("--keep-line", "-k", type=int, required=True,
+                        help="Number of lines to keep; e.g., --keep-line 3")
+    parser.add_argument("--setting", type=str, choices=["cross_file_first", "cross_file_random"], required=True,
+                        help="Setting: cross_file_first or cross_file_random")
+    parser.add_argument("--difficulty", "-d", type=str, choices=["easy", "hard"], required=True,
+                        help="Difficulty level: easy or hard")
     parser.add_argument("--model-name", "-m", type=str, default="",
                         help="HF model name for semantic retrieval (e.g., microsoft/unixcoder-base)")
     parser.add_argument("--max-length", "-M", type=int, default=512,
@@ -149,7 +152,9 @@ if __name__ == "__main__":
     main(
         language=args.language,
         similarity=args.similarity,
-        keep_lines=args.keep_lines,
+        keep_line=args.keep_line,
+        setting=args.setting,
+        difficulty=args.difficulty,
         model_name=args.model_name,
         max_length=args.max_length,
     )
