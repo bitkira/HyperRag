@@ -5,7 +5,7 @@
 # Settings: pass@1, pass@3, pass@5 with random baseline
 
 echo "Starting retrieval evaluation..."
-echo "Pass@k values: 1, 3, 5"
+echo "Pass@k values: 1, 3"
 echo "Random baseline: enabled (100 trials)"
 echo ""
 
@@ -13,7 +13,7 @@ echo ""
 echo "[1/2] Evaluating edit similarity results..."
 uv run python evaluate_retrieval.py \
     --dir results/retrieval/edit \
-    --k-values 1 3 5
+    --k-values 1 3
 
 echo ""
 
@@ -21,7 +21,7 @@ echo ""
 echo "[2/2] Evaluating jaccard similarity results..."
 uv run python evaluate_retrieval.py \
     --dir results/retrieval/jaccard \
-    --k-values 1 3 5
+    --k-values 1 3
 
 echo ""
 echo "All evaluations completed!"
